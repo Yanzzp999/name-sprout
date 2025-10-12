@@ -1,0 +1,107 @@
+package main
+
+import (
+	"flag"
+	"fmt"
+	"os"
+	"strings"
+
+	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/yanzzp/name-sprout/internal/app"
+	"github.com/yanzzp/name-sprout/internal/config"
+	"github.com/yanzzp/name-sprout/internal/providers"
+	"github.com/yanzzp/name-sprout/internal/ui"
+)
+
+func main() {
+	var (
+		cfgPath     = flag.String("config", "config.yaml", "配置文件路径")
+		disableAlt  = flag.Bool("no-alt-screen", false, "禁用备用屏幕渲染")
+		showVersion = flag.Bool("version", false, "打印版本信息")
+		funcFlag    = flag.Bool("f", false, "生成函数名称")
+		varFlag     = flag.Bool("v", false, "生成变量名称")
+		projectFlag = flag.Bool("p", false, "生成项目名称")
+	)
+	flag.Parse()
+
+	if *showVersion {
+		fmt.Println("Name Sprout TUI")
+		return
+	}
+
+	modeCount := 0
+	if *funcFlag {
+		modeCount++
+	}
+	if *varFlag {
+		modeCount++
+	}
+	if *projectFlag {
+		modeCount++
+	}
+	if modeCount != 1 {
+		fmt.Fprintln(os.Stderr, "请使用且仅使用 -f、-v 或 -p 指定命名类型。")
+		os.Exit(1)
+	}
+
+	description := strings.TrimSpace(strings.Join(flag.Args(), " "))
+	if description == "" {
+		fmt.Fprintln(os.Stderr, "请在参数中提供命名描述，例如：namesprout -f \"为一个Go库取函数名\"")
+		os.Exit(1)
+	}
+
+	cfg, err := config.Load(*cfgPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "加载配置失败：%v\n", err)
+		os.Exit(1)
+	}
+
+	appCtx, err := app.New(cfg)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "初始化应用失败：%v\n", err)
+		os.Exit(1)
+	}
+
+	providerName, _ := cfg.DefaultProvider()
+	provider, err := appCtx.Provider(providerName)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "获取模型提供方失败：%v\n", err)
+		os.Exit(1)
+	}
+
+	var kind providers.NameKind
+	switch {
+	case *funcFlag:
+		kind = providers.NameKindFunction
+	case *varFlag:
+		kind = providers.NameKindVariable
+	case *projectFlag:
+		kind = providers.NameKindProject
+	default:
+		// 理论上不会触发，防御性处理。
+		kind = providers.NameKindFunction
+	}
+
+	req := providers.Request{
+		Description: description,
+		Kind:        kind,
+		Count:       cfg.App.MaxSuggestions,
+	}
+
+	model, err := ui.NewModel(providerName, provider, req)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "创建 UI 模型失败：%v\n", err)
+		os.Exit(1)
+	}
+
+	options := []tea.ProgramOption{}
+	if !*disableAlt {
+		options = append(options, tea.WithAltScreen())
+	}
+
+	if err := tea.NewProgram(model, options...).Start(); err != nil {
+		fmt.Fprintf(os.Stderr, "运行 TUI 失败：%v\n", err)
+		os.Exit(1)
+	}
+}
