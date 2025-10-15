@@ -10,18 +10,22 @@ import (
 
 // AppConfig 描述与界面和业务相关的基础配置。
 type AppConfig struct {
-	DefaultProvider string `yaml:"default_provider"`
-	MaxSuggestions  int    `yaml:"max_suggestions"`
+	DefaultProvider    string `yaml:"default_provider"`
+	MaxSuggestions     int    `yaml:"max_suggestions"`
+	DefaultNamingStyle string `yaml:"default_naming_style"`
+	NamingPromptFile   string `yaml:"naming_prompt_file"`
 }
 
 // ProviderSettings 抽象出不同模型提供方的通用配置字段。
 // Options 预留给未来扩展，例如自定义 base_url、组织ID等。
 type ProviderSettings struct {
-	Type     string            `yaml:"type"`
-	APIKey   string            `yaml:"api_key"`
-	Model    string            `yaml:"model"`
-	Endpoint string            `yaml:"endpoint"`
-	Options  map[string]string `yaml:"options"`
+	Type        string            `yaml:"type"`
+	APIKey      string            `yaml:"api_key"`
+	Model       string            `yaml:"model"`
+	Endpoint    string            `yaml:"endpoint"`
+	Temperature *float32          `yaml:"temperature"`
+	TopK        *float32          `yaml:"top_k"`
+	Options     map[string]string `yaml:"options"`
 }
 
 // Config 代表整份应用配置。
@@ -58,12 +62,26 @@ func (c *Config) setDefaults() {
 	if c.App.MaxSuggestions <= 0 {
 		c.App.MaxSuggestions = 5
 	}
+	if c.App.DefaultNamingStyle == "" {
+		c.App.DefaultNamingStyle = "lower_camel"
+	}
+	if c.App.NamingPromptFile == "" {
+		c.App.NamingPromptFile = "prompts/naming.yaml"
+	}
 	if c.Providers == nil {
 		c.Providers = make(map[string]ProviderSettings)
 	}
 	for name, settings := range c.Providers {
+		updated := false
+		if settings.Type == "" {
+			settings.Type = name
+			updated = true
+		}
 		if settings.Options == nil {
 			settings.Options = make(map[string]string)
+			updated = true
+		}
+		if updated {
 			c.Providers[name] = settings
 		}
 	}

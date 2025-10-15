@@ -1,0 +1,41 @@
+styles:
+  lower_camel:
+    label: "小驼峰 (lowerCamelCase)"
+    aliases:
+      - lowerCamelCase
+      - lower camel
+      - 小驼峰
+      - camelcase
+    prompt: |
+      - 使用小驼峰命名法：首个单词首字母小写，其余单词首字母大写，其余字母小写。
+      - 名称中不得包含空格、下划线或连字符。
+  pascal_case:
+    label: "帕斯卡 (PascalCase)"
+    aliases:
+      - PascalCase
+      - pascal
+      - 帕斯卡
+      - upper camel
+    prompt: |
+      - 使用帕斯卡命名法：每个单词首字母大写，其余字母小写，名称中不出现分隔符。
+      - 禁止包含空格、下划线或连字符。
+  snake_case:
+    label: "蛇形 (snake_case)"
+    aliases:
+      - snake_case
+      - snake
+      - 蛇形
+      - 下划线命名
+    prompt: |
+      - 使用蛇形命名法：全部小写，单词之间使用单个下划线连接。
+      - 不得包含空格或连字符，避免出现连续的下划线。
+  kebab_case:
+    label: "烤串 (kebab-case)"
+    aliases:
+      - kebab-case
+      - kebab
+      - 烤串
+      - dash-case
+    prompt: |
+      - 使用烤串命名法：全部小写，单词之间使用单个连字符连接。
+      - 不允许出现空格或下划线，避免出现连续的连字符。

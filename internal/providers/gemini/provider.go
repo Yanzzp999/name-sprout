@@ -15,18 +15,20 @@ import (
 )
 
 const (
-	providerType       = "gemini"
-	defaultModel       = "models/gemini-1.5-pro"
-	defaultTemperature = 0.7
+	providerType               = "gemini"
+	defaultModel               = "models/gemini-1.5-pro"
+	defaultTemperature float32 = 0.7
 )
 
 type geminiProvider struct {
-	name   string
-	model  string
-	client *genai.Client
-	once   sync.Once
-	init   error
-	apiKey string
+	name        string
+	model       string
+	client      *genai.Client
+	once        sync.Once
+	init        error
+	apiKey      string
+	temperature float32
+	topK        *float32
 }
 
 // Register Gemini provider when package initializes.
@@ -43,10 +45,26 @@ func newGeminiProvider(name string, settings config.ProviderSettings) (providers
 		model = defaultModel
 	}
 
+	temperature := defaultTemperature
+	if settings.Temperature != nil {
+		temperature = *settings.Temperature
+	}
+
+	var topK *float32
+	if settings.TopK != nil {
+		if *settings.TopK <= 0 {
+			return nil, errors.New("Gemini 配置的 top_k 必须大于 0")
+		}
+		value := *settings.TopK
+		topK = &value
+	}
+
 	return &geminiProvider{
-		name:   name,
-		model:  model,
-		apiKey: settings.APIKey,
+		name:        name,
+		model:       model,
+		apiKey:      settings.APIKey,
+		temperature: temperature,
+		topK:        topK,
 	}, nil
 }
 
@@ -70,8 +88,11 @@ func (p *geminiProvider) GenerateNames(ctx context.Context, req providers.Reques
 	prompt := buildPrompt(req, count)
 
 	config := &genai.GenerateContentConfig{
-		Temperature:      genai.Ptr[float32](defaultTemperature),
+		Temperature:      genai.Ptr[float32](p.temperature),
 		ResponseMIMEType: "application/json",
+	}
+	if p.topK != nil {
+		config.TopK = p.topK
 	}
 
 	resp, err := p.client.Models.GenerateContent(ctx, p.model, genai.Text(prompt), config)
@@ -116,6 +137,10 @@ func (p *geminiProvider) Warmup(ctx context.Context) error {
 	return p.ensureClient(ctx)
 }
 
+func (p *geminiProvider) ModelIdentifier() string {
+	return p.model
+}
+
 func buildPrompt(req providers.Request, count int) string {
 	var b strings.Builder
 	b.WriteString("你是一名经验丰富的命名顾问，需要基于用户提供的背景信息生成高质量的名称。\n")
@@ -127,6 +152,11 @@ func buildPrompt(req providers.Request, count int) string {
 	b.WriteString("命名任务信息：\n")
 	b.WriteString(fmt.Sprintf("- 命名类型：%s\n", req.Kind))
 	b.WriteString(fmt.Sprintf("- 名称数量：%d\n", count))
+	if req.NamingStyleLabel != "" {
+		b.WriteString(fmt.Sprintf("- 命名格式：%s\n", req.NamingStyleLabel))
+	} else if req.NamingStyle != "" {
+		b.WriteString(fmt.Sprintf("- 命名格式：%s\n", req.NamingStyle))
+	}
 	if req.Language != "" {
 		b.WriteString(fmt.Sprintf("- 输出语言：%s\n", req.Language))
 	}
@@ -135,6 +165,11 @@ func buildPrompt(req providers.Request, count int) string {
 	}
 	if req.Description != "" {
 		b.WriteString(fmt.Sprintf("- 详细描述：%s\n", req.Description))
+	}
+	if prompt := strings.TrimSpace(req.NamingStylePrompt); prompt != "" {
+		b.WriteString("\n命名格式要求：\n")
+		b.WriteString(prompt)
+		b.WriteString("\n")
 	}
 	b.WriteString("\n请直接返回 JSON，对名称进行去重，并确保每个名称不超过 32 个字符。")
 	return b.String()

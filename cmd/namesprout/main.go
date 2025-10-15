@@ -4,12 +4,14 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/yanzzp/name-sprout/internal/app"
 	"github.com/yanzzp/name-sprout/internal/config"
+	"github.com/yanzzp/name-sprout/internal/prompts"
 	"github.com/yanzzp/name-sprout/internal/providers"
 	"github.com/yanzzp/name-sprout/internal/ui"
 )
@@ -19,6 +21,7 @@ func main() {
 		cfgPath     = flag.String("config", "config.yaml", "配置文件路径")
 		disableAlt  = flag.Bool("no-alt-screen", false, "禁用备用屏幕渲染")
 		showVersion = flag.Bool("version", false, "打印版本信息")
+		caseFlag    = flag.String("style", "", "指定命名格式（lowerCamelCase / PascalCase / snake_case / kebab-case）")
 		funcFlag    = flag.Bool("f", false, "生成函数名称")
 		varFlag     = flag.Bool("v", false, "生成变量名称")
 		projectFlag = flag.Bool("p", false, "生成项目名称")
@@ -57,6 +60,44 @@ func main() {
 		os.Exit(1)
 	}
 
+	promptPath := cfg.App.NamingPromptFile
+	if !filepath.IsAbs(promptPath) {
+		base := filepath.Dir(cfg.Source())
+		promptPath = filepath.Join(base, promptPath)
+	}
+
+	namingPrompts, err := prompts.LoadNamingPrompts(promptPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "加载命名提示配置失败：%v\n", err)
+		os.Exit(1)
+	}
+
+	var (
+		namingStyle providers.NamingStyle
+		definition  prompts.NamingPromptDefinition
+		ok          bool
+	)
+
+	if rawStyle := strings.TrimSpace(*caseFlag); rawStyle != "" {
+		if namingStyle, definition, ok = namingPrompts.Lookup(rawStyle); !ok {
+			fmt.Fprintf(os.Stderr, "不支持的命名格式：%s\n", rawStyle)
+			os.Exit(1)
+		}
+	} else {
+		namingStyle, err = providers.ParseNamingStyle(cfg.App.DefaultNamingStyle)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "配置中的默认命名格式无效：%v\n", err)
+			os.Exit(1)
+		}
+		definition, ok = namingPrompts.Definition(namingStyle)
+		if !ok {
+			fmt.Fprintf(os.Stderr, "命名提示配置中缺少默认命名格式：%s\n", namingStyle)
+			os.Exit(1)
+		}
+	}
+	if definition.Label == "" {
+		definition.Label = string(namingStyle)
+	}
 	appCtx, err := app.New(cfg)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "初始化应用失败：%v\n", err)
@@ -84,9 +125,12 @@ func main() {
 	}
 
 	req := providers.Request{
-		Description: description,
-		Kind:        kind,
-		Count:       cfg.App.MaxSuggestions,
+		Description:       description,
+		Kind:              kind,
+		Count:             cfg.App.MaxSuggestions,
+		NamingStyle:       namingStyle,
+		NamingStyleLabel:  definition.Label,
+		NamingStylePrompt: definition.Prompt,
 	}
 
 	model, err := ui.NewModel(providerName, provider, req)

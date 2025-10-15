@@ -29,6 +29,8 @@ type Model struct {
 	providerName string
 	provider     providers.Provider
 	request      providers.Request
+	modelName    string
+	showDetails  bool
 
 	spinner spinner.Model
 
@@ -45,6 +47,11 @@ func NewModel(providerName string, provider providers.Provider, req providers.Re
 		return nil, fmt.Errorf("提供方初始化失败：%w", err)
 	}
 
+	modelName := ""
+	if reporter, ok := provider.(providers.ModelReporter); ok {
+		modelName = reporter.ModelIdentifier()
+	}
+
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
 	sp.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
@@ -53,6 +60,7 @@ func NewModel(providerName string, provider providers.Provider, req providers.Re
 		providerName: providerName,
 		provider:     provider,
 		request:      req,
+		modelName:    modelName,
 		spinner:      sp,
 		loading:      true,
 		status:       "正在等待模型响应...",
@@ -119,6 +127,8 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.moveCursor(-1)
 	case "down":
 		m.moveCursor(1)
+	case "i", "I":
+		m.showDetails = !m.showDetails
 	}
 
 	return m, nil
@@ -134,12 +144,30 @@ func (m *Model) View() string {
 
 	sections = append(sections, titleStyle.Render("🌱 Name Sprout"))
 
-	meta := []string{
-		fmt.Sprintf("提供方: %s", infoStyle.Render(m.providerName)),
-		fmt.Sprintf("命名类型: %s", infoStyle.Render(string(m.request.Kind))),
-		fmt.Sprintf("描述: %s", infoStyle.Render(m.request.Description)),
+	toggle := "▶ 详情 (I)"
+	if m.showDetails {
+		toggle = "▼ 详情 (I)"
 	}
-	sections = append(sections, strings.Join(meta, "\n"))
+	sections = append(sections, faintStyle.Render(toggle))
+
+	if m.showDetails {
+		providerLine := fmt.Sprintf(
+			"提供方: %s  模型: %s",
+			infoStyle.Render(m.providerName),
+			infoStyle.Render(m.modelDisplay()),
+		)
+		meta := []string{
+			providerLine,
+			fmt.Sprintf("命名方式: %s", infoStyle.Render(string(m.request.Kind))),
+		}
+		if label := strings.TrimSpace(m.request.NamingStyleLabel); label != "" {
+			meta = append(meta, fmt.Sprintf("命名格式: %s (%s)", infoStyle.Render(label), faintStyle.Render(string(m.request.NamingStyle))))
+		} else if m.request.NamingStyle != "" {
+			meta = append(meta, fmt.Sprintf("命名格式: %s", infoStyle.Render(string(m.request.NamingStyle))))
+		}
+		meta = append(meta, fmt.Sprintf("描述: %s", infoStyle.Render(m.request.Description)))
+		sections = append(sections, strings.Join(meta, "\n"))
+	}
 
 	if m.loading {
 		sections = append(sections, fmt.Sprintf("%s %s", m.spinner.View(), m.status))
@@ -170,10 +198,17 @@ func (m *Model) View() string {
 		sections = append(sections, errStyle.Render("未获取到任何候选结果。"))
 	}
 
-	help := faintStyle.Render("操作：↑↓ 选择  Enter/C 复制  R 重新生成  Q 退出")
+	help := faintStyle.Render("操作：↑↓ 选择  Enter/C 复制  R 重新生成  I 切换详情  Q 退出")
 	sections = append(sections, help)
 
 	return lipgloss.NewStyle().Padding(1, 2).Render(strings.Join(sections, "\n\n"))
+}
+
+func (m *Model) modelDisplay() string {
+	if strings.TrimSpace(m.modelName) == "" {
+		return "未配置"
+	}
+	return m.modelName
 }
 
 func (m *Model) moveCursor(delta int) {

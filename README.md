@@ -22,6 +22,7 @@ Name Sprout 是一款基于 [Bubble Tea](https://github.com/charmbracelet/bubble
    可选参数：
    - `--config` 指定自定义配置路径。
    - `--no-alt-screen` 禁用备用屏幕（方便与其它终端工具搭配使用）。
+   - `--style` 在运行时选择命名格式（如 `--style snake_case`）。
    - `-f / -v / -p` 分别代表函数、变量、项目命名，三者必须且只能选择一个。
 
 4. **TUI 操作**
@@ -36,16 +37,22 @@ Name Sprout 是一款基于 [Bubble Tea](https://github.com/charmbracelet/bubble
 app:
   default_provider: gemini
   max_suggestions: 5
+  default_naming_style: lower_camel
+  naming_prompt_file: prompts/naming.yaml
 providers:
   gemini:
-    type: gemini
     api_key: "YOUR_GEMINI_API_KEY"
     model: "models/gemini-1.5-pro"
+    temperature: 0.7
+    top_k: 40
 ```
 
 - `app.default_provider`：启动时使用的默认提供方名称。
 - `app.max_suggestions`：单次生成的目标数量。
-- `providers`：以“名称”为 key，value 中 `type` 表示实现类型，其余字段作为特定 Provider 的参数。
+- `app.default_naming_style`：默认命名格式（支持 `lower_camel`、`pascal_case`、`snake_case`、`kebab_case`）。
+- `app.naming_prompt_file`：命名格式提示词文件路径（相对于配置文件目录解析）。
+- `providers`：以“名称”为 key；若未指定 `type`，默认与名称一致，其余字段作为特定 Provider 的参数。
+- `providers.gemini.temperature / top_k`：可选的生成随机性参数，对应 Gemini API 的同名配置。
 
 ## 项目结构
 
