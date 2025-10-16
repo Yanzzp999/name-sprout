@@ -14,6 +14,7 @@ type AppConfig struct {
 	MaxSuggestions     int    `yaml:"max_suggestions"`
 	DefaultNamingStyle string `yaml:"default_naming_style"`
 	NamingPromptFile   string `yaml:"naming_prompt_file"`
+	Proxy              string `yaml:"proxy"`
 }
 
 // ProviderSettings 抽象出不同模型提供方的通用配置字段。
@@ -26,6 +27,7 @@ type ProviderSettings struct {
 	Temperature *float32          `yaml:"temperature"`
 	TopK        *float32          `yaml:"top_k"`
 	Options     map[string]string `yaml:"options"`
+	Proxy       string            `yaml:"proxy"`
 }
 
 // Config 代表整份应用配置。
@@ -79,6 +81,10 @@ func (c *Config) setDefaults() {
 		}
 		if settings.Options == nil {
 			settings.Options = make(map[string]string)
+			updated = true
+		}
+		if settings.Proxy == "" && c.App.Proxy != "" {
+			settings.Proxy = c.App.Proxy
 			updated = true
 		}
 		if updated {

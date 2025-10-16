@@ -39,6 +39,7 @@ app:
   max_suggestions: 5
   default_naming_style: lower_camel
   naming_prompt_file: prompts/naming.yaml
+  proxy: "xxxx"  # 可选，HTTP 代理地址
 providers:
   gemini:
     api_key: "YOUR_GEMINI_API_KEY"

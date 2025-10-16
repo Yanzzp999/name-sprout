@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 
@@ -29,6 +31,7 @@ type geminiProvider struct {
 	apiKey      string
 	temperature float32
 	topK        *float32
+	httpClient  *http.Client
 }
 
 // Register Gemini provider when package initializes.
@@ -59,12 +62,18 @@ func newGeminiProvider(name string, settings config.ProviderSettings) (providers
 		topK = &value
 	}
 
+	httpClient, err := newHTTPClientWithProxy(settings.Proxy)
+	if err != nil {
+		return nil, fmt.Errorf("Gemini 配置的 proxy 无效: %w", err)
+	}
+
 	return &geminiProvider{
 		name:        name,
 		model:       model,
 		apiKey:      settings.APIKey,
 		temperature: temperature,
 		topK:        topK,
+		httpClient:  httpClient,
 	}, nil
 }
 
@@ -120,10 +129,14 @@ func (p *geminiProvider) GenerateNames(ctx context.Context, req providers.Reques
 
 func (p *geminiProvider) ensureClient(ctx context.Context) error {
 	p.once.Do(func() {
-		client, err := genai.NewClient(ctx, &genai.ClientConfig{
+		config := &genai.ClientConfig{
 			APIKey:  p.apiKey,
 			Backend: genai.BackendGeminiAPI,
-		})
+		}
+		if p.httpClient != nil {
+			config.HTTPClient = p.httpClient
+		}
+		client, err := genai.NewClient(ctx, config)
 		if err != nil {
 			p.init = fmt.Errorf("创建 Gemini 客户端失败: %w", err)
 			return
@@ -198,6 +211,37 @@ func collectText(resp *genai.GenerateContentResponse) string {
 		}
 	}
 	return strings.TrimSpace(sb.String())
+}
+
+func newHTTPClientWithProxy(proxy string) (*http.Client, error) {
+	raw := strings.TrimSpace(proxy)
+	if raw == "" {
+		return nil, nil
+	}
+
+	target := raw
+	if !strings.Contains(raw, "://") {
+		target = "http://" + raw
+	}
+
+	parsed, err := url.Parse(target)
+	if err != nil {
+		return nil, err
+	}
+	if parsed.Scheme == "" {
+		return nil, fmt.Errorf("代理地址缺少协议: %s", raw)
+	}
+
+	var transport *http.Transport
+	if base, ok := http.DefaultTransport.(*http.Transport); ok {
+		copy := base.Clone()
+		copy.Proxy = http.ProxyURL(parsed)
+		transport = copy
+	} else {
+		transport = &http.Transport{Proxy: http.ProxyURL(parsed)}
+	}
+
+	return &http.Client{Transport: transport}, nil
 }
 
 type namesEnvelope struct {

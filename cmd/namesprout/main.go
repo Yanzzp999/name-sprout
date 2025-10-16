@@ -54,7 +54,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	cfg, err := config.Load(*cfgPath)
+	configPath := resolveConfigPath(*cfgPath)
+
+	cfg, err := config.Load(configPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "加载配置失败：%v\n", err)
 		os.Exit(1)
@@ -148,4 +150,31 @@ func main() {
 		fmt.Fprintf(os.Stderr, "运行 TUI 失败：%v\n", err)
 		os.Exit(1)
 	}
+}
+
+func resolveConfigPath(path string) string {
+	if path == "" {
+		path = "config.yaml"
+	}
+
+	if filepath.IsAbs(path) {
+		return path
+	}
+
+	if _, err := os.Stat(path); err == nil {
+		return path
+	}
+
+	exePath, err := os.Executable()
+	if err != nil {
+		return path
+	}
+
+	exeDir := filepath.Dir(exePath)
+	candidate := filepath.Join(exeDir, path)
+	if _, err := os.Stat(candidate); err == nil {
+		return candidate
+	}
+
+	return path
 }
