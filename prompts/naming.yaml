@@ -1,3 +1,26 @@
+kinds:
+  function:
+    label: "函数"
+    default_style: lower_camel
+    prompt: |
+      - 使用动词或动宾结构，强调执行的动作及目标对象。
+      - 点明核心业务语义，便于推断返回值或副作用。
+      - 保持精炼，通常由 2~4 个单词组成。
+  variable:
+    label: "变量"
+    default_style: snake_case
+    prompt: |
+      - 使用名词或名词短语，准确描述所存储的数据或语义。
+      - 在合适时刻点明度量单位、类型或作用范围。
+      - 避免动词开头，减少含糊或过度抽象的词汇。
+  project:
+    label: "项目"
+    default_style: kebab_case
+    prompt: |
+      - 面向产品或仓库命名，可适度创意但保持专业可信。
+      - 可以组合核心领域概念，突出差异化价值。
+      - 控制长度，确保易读、易记且便于口头交流。
+
 styles:
   lower_camel:
     label: "小驼峰 (lowerCamelCase)"

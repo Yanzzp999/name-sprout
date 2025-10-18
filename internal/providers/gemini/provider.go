@@ -163,7 +163,11 @@ func buildPrompt(req providers.Request, count int) string {
 	b.WriteString("- 避免输出额外解释或 Markdown。\n\n")
 
 	b.WriteString("命名任务信息：\n")
-	b.WriteString(fmt.Sprintf("- 命名类型：%s\n", req.Kind))
+	if label := strings.TrimSpace(req.KindLabel); label != "" && label != string(req.Kind) {
+		b.WriteString(fmt.Sprintf("- 命名类型：%s (%s)\n", label, req.Kind))
+	} else {
+		b.WriteString(fmt.Sprintf("- 命名类型：%s\n", req.Kind))
+	}
 	b.WriteString(fmt.Sprintf("- 名称数量：%d\n", count))
 	if req.NamingStyleLabel != "" {
 		b.WriteString(fmt.Sprintf("- 命名格式：%s\n", req.NamingStyleLabel))
@@ -178,6 +182,11 @@ func buildPrompt(req providers.Request, count int) string {
 	}
 	if req.Description != "" {
 		b.WriteString(fmt.Sprintf("- 详细描述：%s\n", req.Description))
+	}
+	if prompt := strings.TrimSpace(req.KindPrompt); prompt != "" {
+		b.WriteString("\n命名类型要求：\n")
+		b.WriteString(prompt)
+		b.WriteString("\n")
 	}
 	if prompt := strings.TrimSpace(req.NamingStylePrompt); prompt != "" {
 		b.WriteString("\n命名格式要求：\n")

@@ -74,39 +74,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	var (
-		namingStyle providers.NamingStyle
-		definition  prompts.NamingPromptDefinition
-		ok          bool
-	)
-
-	if rawStyle := strings.TrimSpace(*caseFlag); rawStyle != "" {
-		if namingStyle, definition, ok = namingPrompts.Lookup(rawStyle); !ok {
-			fmt.Fprintf(os.Stderr, "不支持的命名格式：%s\n", rawStyle)
-			os.Exit(1)
-		}
-	} else {
-		namingStyle, err = providers.ParseNamingStyle(cfg.App.DefaultNamingStyle)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "配置中的默认命名格式无效：%v\n", err)
-			os.Exit(1)
-		}
-		definition, ok = namingPrompts.Definition(namingStyle)
-		if !ok {
-			fmt.Fprintf(os.Stderr, "命名提示配置中缺少默认命名格式：%s\n", namingStyle)
-			os.Exit(1)
-		}
-	}
-	if definition.Label == "" {
-		definition.Label = string(namingStyle)
-	}
 	appCtx, err := app.New(cfg)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "初始化应用失败：%v\n", err)
 		os.Exit(1)
 	}
 
-	providerName, _ := cfg.DefaultProvider()
+	providerName, providerSettings := cfg.DefaultProvider()
 	provider, err := appCtx.Provider(providerName)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "获取模型提供方失败：%v\n", err)
@@ -126,16 +100,58 @@ func main() {
 		kind = providers.NameKindFunction
 	}
 
+	kindDefinition, _ := namingPrompts.KindDefinition(kind)
+
+	var (
+		namingStyle providers.NamingStyle
+		definition  prompts.NamingPromptDefinition
+		ok          bool
+	)
+
+	if rawStyle := strings.TrimSpace(*caseFlag); rawStyle != "" {
+		if namingStyle, definition, ok = namingPrompts.Lookup(rawStyle); !ok {
+			fmt.Fprintf(os.Stderr, "不支持的命名格式：%s\n", rawStyle)
+			os.Exit(1)
+		}
+	} else if kindDefinition.DefaultStyle != "" {
+		namingStyle = kindDefinition.DefaultStyle
+		if definition, ok = namingPrompts.Definition(namingStyle); !ok {
+			fmt.Fprintf(os.Stderr, "命名提示配置中缺少默认命名格式：%s\n", namingStyle)
+			os.Exit(1)
+		}
+	} else {
+		namingStyle, err = providers.ParseNamingStyle(cfg.App.DefaultNamingStyle)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "配置中的默认命名格式无效：%v\n", err)
+			os.Exit(1)
+		}
+		definition, ok = namingPrompts.Definition(namingStyle)
+		if !ok {
+			fmt.Fprintf(os.Stderr, "命名提示配置中缺少默认命名格式：%s\n", namingStyle)
+			os.Exit(1)
+		}
+	}
+	if definition.Label == "" {
+		definition.Label = string(namingStyle)
+	}
+
+	kindLabel := kindDefinition.Label
+	if strings.TrimSpace(kindLabel) == "" {
+		kindLabel = string(kind)
+	}
+
 	req := providers.Request{
 		Description:       description,
 		Kind:              kind,
 		Count:             cfg.App.MaxSuggestions,
+		KindLabel:         kindLabel,
+		KindPrompt:        kindDefinition.Prompt,
 		NamingStyle:       namingStyle,
 		NamingStyleLabel:  definition.Label,
 		NamingStylePrompt: definition.Prompt,
 	}
 
-	model, err := ui.NewModel(providerName, provider, req)
+	model, err := ui.NewModel(providerName, provider, providerSettings, req)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "创建 UI 模型失败：%v\n", err)
 		os.Exit(1)

@@ -18,14 +18,23 @@ type NamingPromptDefinition struct {
 	Aliases []string `yaml:"aliases"`
 }
 
+// KindPromptDefinition 描述命名类型的补充提示。
+type KindPromptDefinition struct {
+	Label        string                `yaml:"label"`
+	Prompt       string                `yaml:"prompt"`
+	DefaultStyle providers.NamingStyle `yaml:"default_style"`
+}
+
 type namingPromptFile struct {
 	Styles map[string]NamingPromptDefinition `yaml:"styles"`
+	Kinds  map[string]KindPromptDefinition   `yaml:"kinds"`
 }
 
 // NamingPrompts 管理命名格式与提示词的映射关系。
 type NamingPrompts struct {
-	definitions map[providers.NamingStyle]NamingPromptDefinition
-	aliases     map[string]providers.NamingStyle
+	definitions     map[providers.NamingStyle]NamingPromptDefinition
+	aliases         map[string]providers.NamingStyle
+	kindDefinitions map[providers.NameKind]KindPromptDefinition
 }
 
 // LoadNamingPrompts 从指定路径读取命名提示词配置。
@@ -45,8 +54,9 @@ func LoadNamingPrompts(path string) (*NamingPrompts, error) {
 	}
 
 	lib := &NamingPrompts{
-		definitions: make(map[providers.NamingStyle]NamingPromptDefinition),
-		aliases:     make(map[string]providers.NamingStyle),
+		definitions:     make(map[providers.NamingStyle]NamingPromptDefinition),
+		aliases:         make(map[string]providers.NamingStyle),
+		kindDefinitions: make(map[providers.NameKind]KindPromptDefinition),
 	}
 
 	for key, def := range file.Styles {
@@ -68,12 +78,36 @@ func LoadNamingPrompts(path string) (*NamingPrompts, error) {
 		}
 	}
 
+	for key, def := range file.Kinds {
+		kind, err := providers.ParseNameKind(key)
+		if err != nil {
+			return nil, fmt.Errorf("不支持的命名类型 %q: %w", key, err)
+		}
+		if strings.TrimSpace(def.Prompt) == "" {
+			return nil, fmt.Errorf("命名类型 %q 的 prompt 不能为空", key)
+		}
+		if raw := strings.TrimSpace(string(def.DefaultStyle)); raw != "" {
+			style, err := providers.ParseNamingStyle(raw)
+			if err != nil {
+				return nil, fmt.Errorf("命名类型 %q 的 default_style 无效: %w", key, err)
+			}
+			def.DefaultStyle = style
+		}
+		lib.kindDefinitions[kind] = def
+	}
+
 	return lib, nil
 }
 
 // Definition 返回指定命名格式的提示定义。
 func (n *NamingPrompts) Definition(style providers.NamingStyle) (NamingPromptDefinition, bool) {
 	def, ok := n.definitions[style]
+	return def, ok
+}
+
+// KindDefinition 返回指定命名类型的提示定义。
+func (n *NamingPrompts) KindDefinition(kind providers.NameKind) (KindPromptDefinition, bool) {
+	def, ok := n.kindDefinitions[kind]
 	return def, ok
 }
 

@@ -68,6 +68,8 @@ type Request struct {
 	Count             int
 	Language          string
 	Tone              string
+	KindLabel         string
+	KindPrompt        string
 	NamingStyle       NamingStyle
 	NamingStyleLabel  string
 	NamingStylePrompt string

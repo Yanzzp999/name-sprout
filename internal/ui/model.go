@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/yanzzp/name-sprout/internal/config"
 	"github.com/yanzzp/name-sprout/internal/providers"
 )
 
@@ -31,6 +33,8 @@ type Model struct {
 	request      providers.Request
 	modelName    string
 	showDetails  bool
+	temperature  *float32
+	topK         *float32
 
 	spinner spinner.Model
 
@@ -42,7 +46,7 @@ type Model struct {
 }
 
 // NewModel 创建用于展示命名结果的 TUI 模型。
-func NewModel(providerName string, provider providers.Provider, req providers.Request) (*Model, error) {
+func NewModel(providerName string, provider providers.Provider, settings config.ProviderSettings, req providers.Request) (*Model, error) {
 	if err := warmupProvider(provider); err != nil {
 		return nil, fmt.Errorf("提供方初始化失败：%w", err)
 	}
@@ -50,6 +54,18 @@ func NewModel(providerName string, provider providers.Provider, req providers.Re
 	modelName := ""
 	if reporter, ok := provider.(providers.ModelReporter); ok {
 		modelName = reporter.ModelIdentifier()
+	}
+
+	var temperature *float32
+	if settings.Temperature != nil {
+		value := *settings.Temperature
+		temperature = &value
+	}
+
+	var topK *float32
+	if settings.TopK != nil {
+		value := *settings.TopK
+		topK = &value
 	}
 
 	sp := spinner.New()
@@ -61,6 +77,8 @@ func NewModel(providerName string, provider providers.Provider, req providers.Re
 		provider:     provider,
 		request:      req,
 		modelName:    modelName,
+		temperature:  temperature,
+		topK:         topK,
 		spinner:      sp,
 		loading:      true,
 		status:       "正在等待模型响应...",
@@ -151,14 +169,22 @@ func (m *Model) View() string {
 	sections = append(sections, faintStyle.Render(toggle))
 
 	if m.showDetails {
+		modelText := infoStyle.Render(m.modelDisplay())
+		if params := m.modelParams(); params != "" {
+			modelText = fmt.Sprintf("%s %s", modelText, faintStyle.Render(params))
+		}
 		providerLine := fmt.Sprintf(
 			"提供方: %s  模型: %s",
 			infoStyle.Render(m.providerName),
-			infoStyle.Render(m.modelDisplay()),
+			modelText,
 		)
+		kindDisplay := string(m.request.Kind)
+		if label := strings.TrimSpace(m.request.KindLabel); label != "" && !strings.EqualFold(label, kindDisplay) {
+			kindDisplay = fmt.Sprintf("%s (%s)", label, kindDisplay)
+		}
 		meta := []string{
 			providerLine,
-			fmt.Sprintf("命名方式: %s", infoStyle.Render(string(m.request.Kind))),
+			fmt.Sprintf("命名方式: %s", infoStyle.Render(kindDisplay)),
 		}
 		if label := strings.TrimSpace(m.request.NamingStyleLabel); label != "" {
 			meta = append(meta, fmt.Sprintf("命名格式: %s (%s)", infoStyle.Render(label), faintStyle.Render(string(m.request.NamingStyle))))
@@ -209,6 +235,24 @@ func (m *Model) modelDisplay() string {
 		return "未配置"
 	}
 	return m.modelName
+}
+
+func (m *Model) modelParams() string {
+	var parts []string
+	if m.temperature != nil {
+		parts = append(parts, fmt.Sprintf("temperature=%s", formatFloat(*m.temperature)))
+	}
+	if m.topK != nil {
+		parts = append(parts, fmt.Sprintf("top_k=%s", formatFloat(*m.topK)))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("(%s)", strings.Join(parts, ", "))
+}
+
+func formatFloat(value float32) string {
+	return strconv.FormatFloat(float64(value), 'f', -1, 32)
 }
 
 func (m *Model) moveCursor(delta int) {
